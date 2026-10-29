@@ -173,11 +173,34 @@ export function createHandler(getRedis) {
 }
 
 // ---- ใช้งานจริงบน Vercel ----
+// หา URL + Token ของ Redis จากตัวแปรสภาพแวดล้อม
+// รองรับ KV_REST_API_*, UPSTASH_REDIS_REST_* และกรณีที่ตั้ง prefix เอง เช่น STORAGE_KV_REST_API_URL
+export function findRedisEnv(env = process.env) {
+  const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
+  const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) return { url, token };
+  // กรณีตั้ง prefix เอง: หาคู่ชื่อที่ลงท้ายด้วย REST_API_URL / REST_URL แล้วจับคู่กับ ..._TOKEN ที่ prefix เดียวกัน
+  // เช่น STORAGE_REST_API_URL + STORAGE_REST_API_TOKEN (ไม่จับ *_READ_ONLY_TOKEN เพราะชื่อไม่ตรงรูปแบบ)
+  for (const key of Object.keys(env)) {
+    const m = key.match(/^(.*REST(?:_API)?_)URL$/);
+    if (m && env[key]) {
+      const tk = env[`${m[1]}TOKEN`];
+      if (tk) return { url: env[key], token: tk };
+    }
+  }
+  return null;
+}
+
 let cached;
 async function getRealRedis() {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
+  const found = findRedisEnv();
+  if (!found) {
+    // เขียนเฉพาะ "ชื่อ" ตัวแปรที่คล้ายกันลง Logs ของ Vercel (ไม่เขียนค่า) เพื่อช่วยไล่หาสาเหตุ
+    const similar = Object.keys(process.env).filter((k) => /REDIS|KV_|UPSTASH/i.test(k));
+    console.error("ไม่พบตัวแปรเชื่อม Redis. ตัวแปรที่ชื่อใกล้เคียง:", similar.join(", ") || "(ไม่มีเลย)");
+    return null;
+  }
+  const { url, token } = found;
   if (!cached) {
     const { Redis } = await import("@upstash/redis");
     // ปิดการแปลงค่าอัตโนมัติ เพื่อให้ชื่อผู้เล่นที่เป็นตัวเลข/คำว่า true ไม่ถูกแปลงชนิด
