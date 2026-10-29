@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "เกมวิ่งเก็บเหรียญ พร้อม Leaderboard ออนไลน์ (Vercel + Upstash Redis)",
+  "description": "มาช่วยคิงแมนเก็บกระดองกัน!",
   "dependencies": {
-    "@upstash/redis": "^1.35.0"
+    "@upstash/redis": "^1.35.0",
+    "ioredis": "^5.4.1"
   },
   "engines": {
     "node": ">=20"
