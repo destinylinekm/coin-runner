@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0f172a">
-<title>Where is KINGMAN's shell?</title>
+<title>Coin Runner · เกมวิ่งเก็บเปลือกเต่า</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;800&display=swap" rel="stylesheet">
@@ -133,9 +133,10 @@
 
 <div class="wrap">
   <div class="stage">
-    <canvas id="game" aria-label="ช่วยคิงแมนเก็บกระดองหน่อยยะค้าบบบบ"></canvas>
+    <canvas id="game" aria-label="พื้นที่เล่นเกมวิ่งเก็บเปลือกเต่า"></canvas>
     <button class="fab needs-run" id="btnPause" type="button" aria-label="พักเกม" title="พักเกม (P)">⏸</button>
   </div>
+  <div class="rotate-hint">📱 หมุนจอเป็นแนวนอนจะเล่นสนุกกว่า</div>
   <div class="bar">
     <div class="keys"><b>Space / ↑ / คลิก / แตะจอ</b> = กระโดด (กลางอากาศกระโดดซ้ำได้ 1 ครั้ง) · <b>P / Esc</b> = พักเกม</div>
     <div class="btns">
@@ -149,28 +150,31 @@
 <!-- เมนูเริ่มเกม -->
 <div class="modal show" id="menu" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
   <div class="card">
-    <h1 id="menuTitle">Where is <span>KINGMAN's Shell?</span></h1>
-    <p class="sub">กระดองคิงแมนอยู่ที่ไหน อุนย่า อุนยาย เจ่เจ้ พี่สาว ช่วยคิงแมนตามหาแล้วเก็บให้หน่อยนะค้าบบบ</p>
+    <h1 id="menuTitle">Coin <span>Runner</span></h1>
+    <p class="sub">วิ่งข้ามทุ่งหญ้า ทะเลทราย ป่ายามค่ำคืน และแสงเหนือ — เก็บเปลือกเต่า หลบอุปสรรค แล้วไปติดอันดับโลก!</p>
 
-    <label for="name">Player name</label>
+    <label for="name">ชื่อผู้เล่น (ใช้แสดงใน Leaderboard)</label>
     <input id="name" type="text" maxlength="16" placeholder="เช่น น้องแมว" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div class="hint" id="nameHint">ภาษาไทย/อังกฤษ ตัวเลข เว้นวรรค _ . - (ไม่เกิน 16 ตัว)</div>
 
     <button class="btn full" id="btnPlay" type="button">▶ เริ่มเล่น</button>
 
-    <!--<div class="cols">
+    <div class="cols">
       <div>
         <h2>วิธีเล่น</h2>
         <ul class="how">
+          <li>ตัวละครวิ่งเอง ความเร็วคงที่</li>
           <li>กด <b>Space</b> หรือแตะจอ เพื่อกระโดด (กลางอากาศกระโดดซ้ำได้อีก 1 ครั้ง)</li>
-          <li>เก็บกระดอง 🐢 = 10 คะแนน · วิ่ง 1 เมตร = 1 คะแนน</li>
+          <li>เก็บเปลือกเต่า 🐢 = 10 คะแนน · วิ่ง 1 เมตร = 1 คะแนน</li>
           <li>ชนอุปสรรคเลือดลด 30 · หัวใจ ❤️ เติมเลือด 25 · เลือดหมด = จบเกม</li>
+          <li>ทุก 30 วินาทีเปลี่ยนด่าน (กลางวัน → เย็น → กลางคืน → แสงเหนือ) อุปสรรคใหม่ ๆ จะโผล่มาเรื่อย ๆ</li>
         </ul>
       </div>
       <div>
         <h2>🏆 Top 10 ทั่วโลก</h2>
         <ol class="board" id="boardMenu"></ol>
       </div>
-    </div>-->
+    </div>
 
     <h2 style="margin-top:18px">ไอเทมพิเศษ</h2>
     <ul class="items">
@@ -218,7 +222,7 @@
 <div class="modal" id="board" role="dialog" aria-modal="true" aria-labelledby="boardTitle">
   <div class="card narrow">
     <h1 id="boardTitle" style="text-align:center">🏆 Leaderboard</h1>
-    <p class="sub" style="text-align:center">จัดอันดับ</p>
+    <p class="sub" style="text-align:center">Top 10 ทั่วโลก</p>
     <ol class="board" id="boardFull"></ol>
     <div class="status" id="boardStatus"></div>
     <div class="row">
