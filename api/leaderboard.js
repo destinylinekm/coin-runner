@@ -3,10 +3,11 @@
 //   GET  : ดึงอันดับ Top 10
 //   POST : ส่งคะแนนใหม่  { name, coins, meters, seconds }
 //
-// ฐานข้อมูล: Upstash Redis (เพิ่มได้ฟรีผ่าน Vercel → Storage → Marketplace)
+// ฐานข้อมูล: Redis (เพิ่มได้ฟรีผ่าน Vercel → Storage → Marketplace → Upstash)
 // ตัวแปรสภาพแวดล้อมที่รองรับ (Vercel ใส่ให้อัตโนมัติเมื่อเชื่อมฐานข้อมูล):
-//   KV_REST_API_URL  + KV_REST_API_TOKEN          (จาก Vercel Marketplace)
-//   UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (จาก Upstash โดยตรง)
+//   KV_REST_API_URL  + KV_REST_API_TOKEN              (REST, จาก Vercel Marketplace)
+//   UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (REST, จาก Upstash โดยตรง)
+//   REDIS_URL  (เช่น rediss://default:...@host:6379 — ใช้ผ่านแพ็กเกจ ioredis)
 
 const LEADERBOARD_KEY = "coinrunner:leaderboard";
 const TOP_N = 10;
@@ -173,40 +174,73 @@ export function createHandler(getRedis) {
 }
 
 // ---- ใช้งานจริงบน Vercel ----
-// หา URL + Token ของ Redis จากตัวแปรสภาพแวดล้อม
-// รองรับ KV_REST_API_*, UPSTASH_REDIS_REST_* และกรณีที่ตั้ง prefix เอง เช่น STORAGE_KV_REST_API_URL
+// ---- หาค่าเชื่อมต่อ Redis จากตัวแปรสภาพแวดล้อม ----
+// แบบที่ 1 (REST): KV_REST_API_URL + KV_REST_API_TOKEN, UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+//                  รวมถึงกรณีตั้ง prefix เอง เช่น STORAGE_REST_API_URL + STORAGE_REST_API_TOKEN
 export function findRedisEnv(env = process.env) {
   const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
   const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
   if (url && token) return { url, token };
-  // กรณีตั้ง prefix เอง: หาคู่ชื่อที่ลงท้ายด้วย REST_API_URL / REST_URL แล้วจับคู่กับ ..._TOKEN ที่ prefix เดียวกัน
-  // เช่น STORAGE_REST_API_URL + STORAGE_REST_API_TOKEN (ไม่จับ *_READ_ONLY_TOKEN เพราะชื่อไม่ตรงรูปแบบ)
   for (const key of Object.keys(env)) {
     const m = key.match(/^(.*REST(?:_API)?_)URL$/);
     if (m && env[key]) {
-      const tk = env[`${m[1]}TOKEN`];
+      const tk = env[`${m[1]}TOKEN`]; // ไม่จับ *_READ_ONLY_TOKEN เพราะชื่อไม่ตรงรูปแบบ
       if (tk) return { url: env[key], token: tk };
     }
   }
   return null;
 }
 
+// แบบที่ 2 (TCP): REDIS_URL เช่น rediss://default:รหัส@host:6379 (Vercel Marketplace บางแบบให้มาแค่ตัวนี้)
+export function findRedisUrl(env = process.env) {
+  const isRedisUrl = (v) => typeof v === "string" && /^rediss?:\/\//i.test(v);
+  if (isRedisUrl(env.REDIS_URL)) return env.REDIS_URL;
+  if (isRedisUrl(env.KV_URL)) return env.KV_URL;
+  for (const key of Object.keys(env)) {
+    if (/URL$/.test(key) && isRedisUrl(env[key])) return env[key];
+  }
+  return null;
+}
+
+// ตัวแปลงให้ ioredis ใช้ชุดคำสั่งเดียวกับที่ handler เรียก
+export function ioredisAdapter(c) {
+  return {
+    incr: (k) => c.incr(k),
+    expire: (k, s) => c.expire(k, s),
+    zadd: (k, opts, { score, member }) =>
+      opts && opts.gt ? c.zadd(k, "GT", score, member) : c.zadd(k, score, member),
+    zscore: (k, m) => c.zscore(k, m),
+    zrevrank: (k, m) => c.zrevrank(k, m),
+    zrange: (k, a, b) => c.zrevrange(k, a, b, "WITHSCORES"), // เรียงจากคะแนนสูงไปต่ำ → [ชื่อ, คะแนน, ...]
+  };
+}
+
 let cached;
 async function getRealRedis() {
-  const found = findRedisEnv();
-  if (!found) {
-    // เขียนเฉพาะ "ชื่อ" ตัวแปรที่คล้ายกันลง Logs ของ Vercel (ไม่เขียนค่า) เพื่อช่วยไล่หาสาเหตุ
-    const similar = Object.keys(process.env).filter((k) => /REDIS|KV_|UPSTASH/i.test(k));
-    console.error("ไม่พบตัวแปรเชื่อม Redis. ตัวแปรที่ชื่อใกล้เคียง:", similar.join(", ") || "(ไม่มีเลย)");
-    return null;
-  }
-  const { url, token } = found;
-  if (!cached) {
+  if (cached) return cached;
+
+  const rest = findRedisEnv();
+  if (rest) {
     const { Redis } = await import("@upstash/redis");
     // ปิดการแปลงค่าอัตโนมัติ เพื่อให้ชื่อผู้เล่นที่เป็นตัวเลข/คำว่า true ไม่ถูกแปลงชนิด
-    cached = new Redis({ url, token, automaticDeserialization: false });
+    cached = new Redis({ url: rest.url, token: rest.token, automaticDeserialization: false });
+    return cached;
   }
-  return cached;
+
+  const tcpUrl = findRedisUrl();
+  if (tcpUrl) {
+    const mod = await import("ioredis");
+    const IORedis = mod.default?.default || mod.default || mod;
+    const client = new IORedis(tcpUrl, { maxRetriesPerRequest: 2, connectTimeout: 5000 });
+    client.on("error", (e) => console.error("Redis connection error:", e && e.message));
+    cached = ioredisAdapter(client);
+    return cached;
+  }
+
+  // เขียนเฉพาะ "ชื่อ" ตัวแปรที่คล้ายกันลง Logs ของ Vercel (ไม่เขียนค่า) เพื่อช่วยไล่หาสาเหตุ
+  const similar = Object.keys(process.env).filter((k) => /REDIS|KV_|UPSTASH/i.test(k));
+  console.error("ไม่พบตัวแปรเชื่อม Redis. ตัวแปรที่ชื่อใกล้เคียง:", similar.join(", ") || "(ไม่มีเลย)");
+  return null;
 }
 
 export default createHandler(getRealRedis);
