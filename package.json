@@ -1,0 +1,13 @@
+{
+  "name": "coin-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "เกมวิ่งเก็บเหรียญ พร้อม Leaderboard ออนไลน์ (Vercel + Upstash Redis)",
+  "dependencies": {
+    "@upstash/redis": "^1.35.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
